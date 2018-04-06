@@ -10,6 +10,14 @@ import sqlite3
 from threading import Timer
 from pprint import pprint
 
+def loadConfig():
+    data = open("config.txt", "r+")
+    for line in data:
+        temp = line
+        cfg = temp.rstrip()
+        data.close()
+        return cfg
+
 def connect(owner, nick, channel, server, password, port, irc):
     irc.send(bytes('PASS ' + password + '\r\n', 'UTF-8'))
     irc.send(bytes('USER ' + nick + '\r\n', 'UTF-8'))
@@ -19,11 +27,12 @@ def connect(owner, nick, channel, server, password, port, irc):
 
 
 def reminder(usr, msg, c):
-    owner = ''
-    nick = ''
-    channel = '#'
+    owner = 'SirLawlington'
+    nick = 'zeevBOT'
+    channel = '#zeevtwitch'
     server = 'irc.twitch.tv'
-    password = 'oauth:'
+    password = loadConfig()
+
     port = 6667
     irc = socket.socket()
     irc.connect((server, port))

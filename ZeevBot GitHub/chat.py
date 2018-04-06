@@ -12,11 +12,11 @@ import multiprocessing
 import datetime
 from pprint import pprint
 
-owner =''
-nick = ''
-channel ='#'
+owner ='SirLawlington'
+nick = 'zeevBOT'
+channel ='#zeevtwitch'
 server = 'irc.twitch.tv'
-password ='oauth:'
+password = loadConfig()
 port = 6667
 inputBuffer=""
 irc = socket.socket()
