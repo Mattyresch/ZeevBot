@@ -12,6 +12,8 @@ import multiprocessing
 import datetime
 from pprint import pprint
 
+conn = sqlite3.connect('bot.db')
+cur = conn.cursor()
 owner ='SirLawlington'
 nick = 'zeevBOT'
 channel ='#zeevtwitch'
@@ -24,17 +26,21 @@ irc.connect((server, port))
 irc.send(bytes('PASS ' + password + '\r\n', 'UTF-8'))
 irc.send(bytes('USER ' + nick + '\r\n', 'UTF-8'))
 irc.send(bytes('NICK ' + nick + '\r\n', 'UTF-8'))
+# irc.send(bytes('CAP REQ :twitch.tv/membership\r\n', 'UTF-8'))
 irc.send(bytes('JOIN ' + channel + '\r\n', 'UTF-8'))
 irc.send(bytes("USER %s %s : %s \r\n" %(nick, server, nick), 'UTF-8'))
-# state = getState(state)
+last = getNames()
+
 while 1:
     ircmessage = irc.recv(2048).decode("UTF-8", errors="ignore")
     ircmessage = ircmessage.strip('\n\r')
-    #print(parse(ircmessage))
     #break message into two parts: user and message
     #stored in dict, keys are 'user' and 'msg'
     if ircmessage.find('PING') != -1:
         irc.send(bytes('PONG ' + server + '\r\n', 'UTF-8'))
+        ##ompareNames(last)
+        addPoints(last)
+        last = getNames()
         x = random.randint(0, 5)
         if x == 0:
             msg = bytes('PRIVMSG ' + channel + ' : When Zeev reaches 1000 followers he will be giving back to the community with a special giveaway. Just give the channel a follow and when 1000 followers are hit he will give the card out to a random follower WHO IS WATCHING THE STREAM!\r\n', 'UTF-8')
@@ -52,13 +58,9 @@ while 1:
     parsed = parse(ircmessage)
     print(parsed['user'] + ':' + parsed['msg'])
     evaluated = evaluate(parsed['msg'])
-    # try:
-    #     print(evaluated['command'] + " : evaluated")
-    #     print(evaluated['args'] + " : evaluated")
-    # except TypeError:
-    #     continue
     try:
         if evaluated['command'] == 'NONE':
+            addMessage(parsed['user'])
             continue
         else:
          output = execute(evaluated['command'], evaluated['args'], parsed['user'])
