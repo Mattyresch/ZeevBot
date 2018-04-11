@@ -215,40 +215,49 @@ def execute(command, args, user):
             result = bytes('PRIVMSG ' + c + ' :Improper usage. Try !wager <amount> <over/under/win/loss>\r\n', 'UTF-8')
         else:
             temp = str(args).partition(' ')
-            wager = int(temp[0])
+            try:
+                cur.execute("SELECT points FROM points WHERE name=?", (user,))
+                wager = int(temp[0])
+                balance = cur.fetchone()
+                bal = int(balance[0])
+            except ValueError:
+                if str(temp[0]) == 'all':
+                    cur.execute("SELECT points FROM points WHERE name=?", (user,))
+                    balance = cur.fetchone()
+                    wager = int(balance[0])
+                    bal = int(balance[0])
+                else:
+                    return bytes('PRIVMSG ' + c + ' :@' + user + ' improper usage. Check your balance with !zeevbux, then place a wager using !wager <amount or "all"><over/under/win/loss>\r\n', 'UTF-8')
             type = temp[2]
-            cur.execute("SELECT points FROM points WHERE name=?", (user,))
-            balance = cur.fetchone()
-            bal = int(balance[0])
             print(str(wager) + " : " + str(balance[0]) + " : " + type)
-            if wager <= int(balance[0]):
+            if wager <= bal:
                 if type=='win' or type=='loss':
                     cur.execute("SELECT wins, losses FROM state WHERE date=?", (formatted,))
                     winloss = cur.fetchone()
                     try:
                         payout = int((wager * (winloss[1] / winloss[0])) + wager)
+                        newbal = bal - wager
                     except ZeroDivisionError:
                         payout = wager * 1.5
+                        newbal = bal - wager
                     except TypeError:
-                        payout = wager * (1.5)
+                        payout = bal * (1.5)
+                        newbal = 0
+                        wager = bal
                     print(user + " bet " + str(wager) + " expected payout of " + str(payout) + " on bet type " + type)
                     cur.execute("INSERT INTO open_bets VALUES (?, ?, ?, ?)", (user, wager, payout ,type))
-                    newbal = bal - wager
                     cur.execute("UPDATE points SET points=? WHERE name=?", (newbal, user))
-                    result = bytes('PRIVMSG ' + c + ' :@' + user + ' just bet ' + str(wager) + 'ZeevBucks that Zeev will ' + type + ' their next game, with an expected payout of ' + str(payout) + ' if they are right\r\n', 'UTF-8')
+                    result = bytes('PRIVMSG ' + c + ' :@' + user + ' just bet ' + str(wager) + ' ZeevBucks that Zeev will ' + type + ' their next game, with an expected payout of ' + str(payout) + ' if they are right\r\n', 'UTF-8')
                 elif type=='over' or type=='under':
                     cur.execute("SELECT kills, deaths FROM state WHERE date=?", (formatted,))
                     killdeath = cur.fetchone()
                     try:
-                        if(killdeath[0]>killdeath[1]):
-                            kd = killdeath[0]/killdeath[1]
-                        else:
-                            kd = killdeath[1]/killdeath[0]
-                        payout = payout + int(payout * kd)
+                        kd = killdeath[0]/killdeath[1]
                     except TypeError:
-                        payout = wager * 2
-                    print(user + " bet " + str(wager) + " expected payout of " + str(payout) + " on bet type " + type)
+                        kd = 5
+                    payout = int(wager + (wager * (1/kd)))
                     newbal = bal - wager
+                    print(user + " bet " + str(wager) + " expected payout of " + str(payout) + " on bet type " + type)
                     cur.execute("UPDATE points SET points=? WHERE name=?", (newbal, user))
                     cur.execute("INSERT INTO open_bets VALUES (?, ?, ?, ?)", (user, wager, payout ,type))
                     result = bytes('PRIVMSG ' + c + ' :@' + user + ' just bet ' + str(wager) + ' ZeevBucks that Zeev will get ' + type + ' their average kills next game, with an expected payout of ' + str(payout) + ' if they are right\r\n', 'UTF-8')
@@ -314,7 +323,6 @@ def execute(command, args, user):
         kills = cur.fetchone()
         result = bytes('PRIVMSG ' + c + ' :Zeev has given  ' + str(kills[0]) + ' nerds swirlies this stream, sending their careers down the toilet\r\n', 'UTF-8')
     elif command == '!addloss' and check == 1:
-
         cur.execute("SELECT kills, deaths FROM state WHERE date=?", (formatted,))
         killdeath = cur.fetchone()
         kills = int(args)
@@ -555,6 +563,9 @@ def execute(command, args, user):
         row = cur.fetchone()
         print(row)
         result = bytes('PRIVMSG ' + c + ' : Recap for yesterday: ' + str(row[1]) + ' kills, ' + str(row[2]) + ' deaths, ' + str(row[3]) + ' wins, ' + str(row[4]) + ' losses, ' + str(row[5]) + ' burps, and ' + str(row[6]) + ' pees.\r\n','UTF-8')
+    elif command == '!resetState':
+        cur.execute("UPDATE state SET kills=0, deaths=0, wins=0, losses=0, burps=0, pees=0, p1='', p2='', p3='' WHERE date=?", (formatted,))
+        result = bytes('PRIVMSG ' + c + ' :State reset.\r\n', 'UTF-8')
     elif command == '!freemoney':
         temp = bAAP()
         result = bytes('PRIVMSG ' + c + ' :Arbitrage opportunity found - ' + temp + '\r\n', 'UTF-8')
