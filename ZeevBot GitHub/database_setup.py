@@ -8,6 +8,8 @@ c.execute('''CREATE TABLE totals(date text, kills integer, deaths integer, wins 
 c.execute('''CREATE TABLE mods(name text)''')
 c.execute('''CREATE TABLE points(name text, points integer, messages integer)''')
 c.execute('''CREATE TABLE open_bets(name text, wager integer, payout integer, type text)''')
+c.execute('''CREATE TABLE flags(bet_flag integer)''')
+c.execute("INSERT into flags VALUES (0)")
 mods = [("capta1n_cypher", ), ("casper026", ), ("dennischirino", ), ("forestna", ), ("frankonical", ),
         ("geemctee", ), ("iamtrevormay", ), ("ianwass", ), ("killoginet", ), ("lieza", ), ("moozow", ), ("nbl_sniper", ),
         ("nordicevan", ), ("ogkickback", ), ("ph0enixb1ood", ), ("poacher117", ), ("secko", ), ("sirlawlington", ),

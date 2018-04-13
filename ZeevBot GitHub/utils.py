@@ -192,10 +192,10 @@ def checkPriv(user):
         return 0
 def execute(command, args, user):
     c = '#zeevtwitch'
-    check = checkPriv(user)
+    #check = checkPriv(user)
     conn = sqlite3.connect('bot.db')
     cur = conn.cursor()
-    print(check)
+    #print(check)
     date = datetime.datetime.now()
     formatted = date.strftime("%Y-%m-%d")
     yesterday = datetime.datetime.today() - timedelta(days=1)
@@ -210,9 +210,15 @@ def execute(command, args, user):
         result = bytes('PRIVMSG ' + c + ' :Sorry my owner killed you. I would have done it myself, but I have no hands BibleThump\r\n', 'UTF-8')
     elif command == '!tracker':
         result = bytes('PRIVMSG ' + c + ' : https://fortnitetracker.com/profile/pc/zeevtwitch <- click here for stats\r\n', 'UTF-8')
-    elif command == '!wager':
+    elif command == '!wager' or command == '!bet':
+        cur.execute("SELECT bet_flag FROM flags")
+        value = cur.fetchone()
+        flag = value[0]
+        if flag == 0:
+            return bytes('PRIVMSG ' + c + ' :@' + user + ' sorry, but betting has been closed for this game.\r\n', 'UTF=8')
+        accepted_bets = {'win', 'loss', 'over', 'under'}
         if (args == ''):
-            result = bytes('PRIVMSG ' + c + ' :Improper usage. Try !wager <amount> <over/under/win/loss>\r\n', 'UTF-8')
+            result = bytes('PRIVMSG ' + c + ' :@' + user + ' improper usage. Check your balance with !zeevbux, then place a wager using <!wager or !bet> <amount or "all"><over/under/win/loss>\r\n', 'UTF-8')
         else:
             temp = str(args).partition(' ')
             try:
@@ -227,11 +233,19 @@ def execute(command, args, user):
                     wager = int(balance[0])
                     bal = int(balance[0])
                 else:
-                    return bytes('PRIVMSG ' + c + ' :@' + user + ' improper usage. Check your balance with !zeevbux, then place a wager using !wager <amount or "all"><over/under/win/loss>\r\n', 'UTF-8')
+                    return bytes('PRIVMSG ' + c + ' :@' + user + ' improper usage. Check your balance with !zeevbux, then place a wager using <!wager or !bet> <amount or "all"><over/under/win/loss>\r\n', 'UTF-8')
             type = temp[2]
+            if type not in accepted_bets:
+                return bytes('PRIVMSG ' + c + ' :@' + user + ' improper usage. Check your balance with !zeevbux, then place a wager using <!wager or !bet> <amount or "all"><over/under/win/loss>\r\n','UTF-8')
             print(str(wager) + " : " + str(balance[0]) + " : " + type)
             if wager <= bal:
                 if type=='win' or type=='loss':
+                    checks = {'win', 'loss'}
+                    cur.execute("SELECT * from open_bets WHERE name=?", (user,))
+                    temp = cur.fetchall()
+                    for b in temp:
+                        if b[3] in checks:
+                            return bytes('PRIVMSG ' + c + ' :@' + user + ' user already has a bet open on type win/loss. Try over/under, or just wait for Tyler to finish this round.\r\n', 'UTF-8')
                     cur.execute("SELECT wins, losses FROM state WHERE date=?", (formatted,))
                     winloss = cur.fetchone()
                     try:
@@ -249,11 +263,19 @@ def execute(command, args, user):
                     cur.execute("UPDATE points SET points=? WHERE name=?", (newbal, user))
                     result = bytes('PRIVMSG ' + c + ' :@' + user + ' just bet ' + str(wager) + ' ZeevBucks that Zeev will ' + type + ' their next game, with an expected payout of ' + str(payout) + ' if they are right\r\n', 'UTF-8')
                 elif type=='over' or type=='under':
+                    checks = {'under', 'over'}
+                    cur.execute("SELECT * from open_bets WHERE name=?", (user,))
+                    temp = cur.fetchall()
+                    for b in temp:
+                        if b[3] in checks:
+                            return bytes('PRIVMSG ' + c + ' :@' + user + ' user already has a bet open on type over/under. Try win/loss, or just wait for Tyler to finish this round.\r\n', 'UTF-8')
                     cur.execute("SELECT kills, deaths FROM state WHERE date=?", (formatted,))
                     killdeath = cur.fetchone()
                     try:
                         kd = killdeath[0]/killdeath[1]
                     except TypeError:
+                        kd = 5
+                    except ZeroDivisionError:
                         kd = 5
                     payout = int(wager + (wager * (1/kd)))
                     newbal = bal - wager
@@ -274,9 +296,11 @@ def execute(command, args, user):
         row = cur.fetchone()
         burps = str(row[0])
         result = bytes('PRIVMSG ' + c + ' :Zeev has burped ' + burps + ' times without saying excuse me, this stream alone. Tsk tsk.\r\n', 'UTF-8')
-    elif command == '!zeevbux':
+    elif command == '!zeevbux' or command == '!zeevbucks' or command == '!balance':
         cur.execute("SELECT points FROM points WHERE name=?", (user,))
         balance = cur.fetchone()
+        print(user)
+        print(str(balance[0]))
         result = bytes('PRIVMSG ' + c + ' :@' +user +' you currently have ' + str(balance[0]) + ' ZeevBux in your account.\r\n', 'UTF-8')
     elif command == '!pottycount':
         cur.execute("SELECT pees FROM state")
@@ -297,7 +321,7 @@ def execute(command, args, user):
         burps = burps + 1
         cur.execute("UPDATE state SET burps=? where date=?", (burps, formatted))
         result = bytes('PRIVMSG ' + c + ' :*buuuuuuurp* ni-*burp*-ice one there Zeev. That is li-*burp*-ike your ' + str(burps) +' burp today or something-I don\'t know *burp* who keeps track of *burp* d-d-dumb stuff like this anyway.\r\n', 'UTF-8')
-    elif command == '!addkills' or command == '!addkill' and check == 1:
+    elif command == '!addkills' or command == '!addkill':
         if (args == ''):
             r = cur.execute("Select * from state")
             row = cur.fetchone()
@@ -322,7 +346,20 @@ def execute(command, args, user):
         cur.execute("SELECT kills FROM state WHERE date=?", (formatted,))
         kills = cur.fetchone()
         result = bytes('PRIVMSG ' + c + ' :Zeev has given  ' + str(kills[0]) + ' nerds swirlies this stream, sending their careers down the toilet\r\n', 'UTF-8')
-    elif command == '!addloss' and check == 1:
+    elif command == '!refund':
+        cur.execute("SELECT name, wager FROM open_bets")
+        bets = cur.fetchall()
+        for b in bets:
+            name = b[0]
+            wager = b[1]
+            cur.execute("SELECT points FROM points WHERE name=?", (name,))
+            bal = cur.fetchone()
+            new_bal = int(bal[0])
+            new_bal = new_bal + int(wager)
+            cur.execute("UPDATE points SET points=? WHERE name=?", (new_bal, name))
+        cur.execute("DELETE from open_bets")
+        result = bytes('PRIVMSG ' + c + ' :bets refunded, something must have gone wrong.\r\n', 'UTF-8')
+    elif command == '!addloss':
         cur.execute("SELECT kills, deaths FROM state WHERE date=?", (formatted,))
         killdeath = cur.fetchone()
         kills = int(args)
@@ -338,8 +375,8 @@ def execute(command, args, user):
             # name = b[0]
             # reward = b[1]
             # bet_type = b[2]
-            #print(b)
-            #print(b.keys())
+            # print(b)
+            # print(b.keys())
             # row = cur.fetchone()
             name = b[0]
             reward = b[1]
@@ -349,14 +386,14 @@ def execute(command, args, user):
             bal = cur.fetchone()
             initial_bal = bal[0]
             if bet_type == 'under':
-                if(kills <= kd):
+                if (kills <= kd):
                     new_bal = initial_bal + reward
                     cur.execute("UPDATE points SET points=? WHERE name=?", (new_bal, name))
                     print(name + " new balance: " + str(new_bal))
                     conn.commit()
                     continue
             elif bet_type == 'over':
-                if(kills >= kd):
+                if (kills >= kd):
                     new_bal = initial_bal + reward
                     cur.execute("UPDATE points SET points=? WHERE name=?", (new_bal, name))
                     print(name + " new balance: " + str(new_bal))
@@ -371,7 +408,6 @@ def execute(command, args, user):
             else:
                 continue
         cur.execute("DELETE FROM open_bets")
-
         cur.execute("Select * from state")
         row = cur.fetchone()
         try:
@@ -390,7 +426,8 @@ def execute(command, args, user):
         p3 = row[9]
         cur.execute("INSERT INTO losses VALUES(?, ?, ?, ? , ?)", (formatted, kills, p1, p2, p3))
         cur.execute("UPDATE state SET deaths=?, kills=?, losses=? WHERE date=?", (deaths, totkills, losses, formatted))
-        result = bytes('PRIVMSG ' + c + ' :You have added a loss and ' + str(kills) + ' kills. So far, Zeev has ' + str(losses) + ' this stream.\r\n', 'UTF-8')
+        result = bytes('PRIVMSG ' + c + ' :You have added a loss and ' + str(kills) + ' kills. So far, Zeev has ' + str(
+            losses) + ' this stream.\r\n', 'UTF-8')
     elif command == '!winloss':
         cur.execute("Select * from state")
         row = cur.fetchone()
@@ -403,11 +440,32 @@ def execute(command, args, user):
         except ZeroDivisionError:
             kd = 0
         result = bytes('PRIVMSG ' + c + ' :Zeev has a ' + str(wins) + '-' + str(losses) + ' record today, with a kill/death ratio of ' + str(kd) + ' so far.\r\n', 'UTF-8')
-    elif command == '!openwagers':
+    elif command == '!mywagers' or command == '!mybets':
         bets = cur.execute("SELECT * FROM open_bets WHERE name=?", (user,))
+        allbets=""
         for b in bets:
-            print(b)
-        result = bytes('PRIVMSG ' + c + ' :Open bets posted to CLI\r\n', 'UTF-8')
+            allbets += "(Wager: " + str(b[1]) + " | Reward: " + str(b[2]) + " | Bet Type: " + str(b[3]) + ")"
+            # print(b)
+            # print(allbets)
+        result = bytes('PRIVMSG ' + c + ' :Open bets for @' + user + ' '+ allbets + '\r\n', 'UTF-8')
+    elif command == '!openbets' or command == '!openbetting':
+        cur.execute("SELECT bet_flag FROM flags")
+        value = cur.fetchone()
+        flag = value[0]
+        if flag == 0:
+            cur.execute("UPDATE flags SET bet_flag=1")
+            result = bytes('PRIVMSG ' + c + ' :Betting opened\r\n','UTF-8')
+        else:
+            result = bytes('PRIVMSG ' + c + ' :Betting has already been opened\r\n', 'UTF-8')
+    elif command == '!closebets' or command == '!closebetting':
+        cur.execute("SELECT bet_flag FROM flags")
+        value = cur.fetchone()
+        flag = value[0]
+        if flag == 1:
+            cur.execute("UPDATE flags SET bet_flag=0")
+            result = bytes('PRIVMSG ' + c + ' :Betting closed\r\n', 'UTF-8')
+        else:
+            result = bytes('PRIVMSG ' + c + ' :Betting has already been closed\r\n', 'UTF-8')
     elif command == '!removebets':
         cur.execute("DELETE FROM open_bets")
         result = bytes('PRIVMSG ' + c + ' :Bets deleted\r\n', 'UTF-8')
@@ -432,10 +490,13 @@ def execute(command, args, user):
                 if(args > kd):
                     new_bal = balance + int(row[2])
                     cur.execute("UPDATE points SET points=? WHERE name=?", (new_bal, user))
-    elif command == '!addwin' or command =='!addwins' and check == 1:
+    elif command == '!addwin' or command =='!addwins':
         cur.execute("SELECT kills, deaths FROM state WHERE date=?", (formatted,))
         killdeath = cur.fetchone()
-        kills = int(args)
+        try:
+            kills = int(args)
+        except ValueError:
+            return bytes('PRIVMSG ' + c + ' :Improper usage, try !addwin <number of kills.\r\n', 'UTF-8')
         try:
             kd = int(killdeath[0] / killdeath[1])
         except ZeroDivisionError:
@@ -502,7 +563,7 @@ def execute(command, args, user):
         row = cur.fetchone()
         wins = row[0]
         result = bytes('PRIVMSG ' + c + ' :Zeev currently has ' + str(wins) + ' wins this stream\r\n', 'UTF-8')
-    elif command == '!addpartner' or command == '!addpartners' and check == 1:
+    elif command == '!addpartner' or command == '!addpartners':
         if (args == ''):
             result = bytes('PRIVMSG ' + c + ' :Improper usage: try !addpartner <partner name>\r\n', 'UTF-8')
         else:
@@ -523,7 +584,7 @@ def execute(command, args, user):
                     result = bytes('PRIVMSG ' + c + ' :Cannot add any more partners, Zeev already has 3!\r\n', 'UTF-8')
             except ValueError:
                 result = bytes('PRIVMSG ' + c + ' :Improper usage: try !addpartner <partner name>\r\n', 'UTF-8')
-    elif command == '!clearpartners' and check == 1:
+    elif command == '!clearpartners':
         cur.execute("UPDATE state SET p1='', p2='', p3='' WHERE date=?", (formatted,))
         result = bytes('PRIVMSG ' + c + ' :Back to soloqueue to destroy some nerds SwiftRage\r\n', 'UTF-8')
     elif command == '!getpartners' or command == '!partners':
@@ -537,7 +598,7 @@ def execute(command, args, user):
             result = bytes('PRIVMSG ' + c + ' :Zeev is currently playing squads with ' + row[0] + ' and ' + row[1] + '\r\n', 'UTF-8')
         elif(row[0]!='' and row[1]!='' and row[2]!=''):
             result = bytes('PRIVMSG ' + c + ' :Zeev is currently playing squads with ' + row[0] +', ' + row[1] + ' and ' + row[2] + '\r\n', 'UTF-8')
-    elif command == '!newStream' and check == 1:
+    elif command == '!newStream':
         cur.execute("SELECT * from state")
         row = cur.fetchone()
         if(row[0] == formatted):
