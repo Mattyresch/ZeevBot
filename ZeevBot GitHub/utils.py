@@ -9,6 +9,8 @@ import socket
 import sqlite3
 from threading import Timer
 from pprint import pprint
+from bs4 import BeautifulSoup
+
 def loadConfig():
     data = open("config.txt", "r+")
     for line in data:
@@ -496,7 +498,7 @@ def execute(command, args, user):
         try:
             kills = int(args)
         except ValueError:
-            return bytes('PRIVMSG ' + c + ' :Improper usage, try !addwin <number of kills.\r\n', 'UTF-8')
+            return bytes('PRIVMSG ' + c + ' :Improper usage, try !addwin <number of kills>.\r\n', 'UTF-8')
         try:
             kd = int(killdeath[0] / killdeath[1])
         except ZeroDivisionError:
@@ -666,3 +668,85 @@ def execute(command, args, user):
     conn.commit()
     conn.close()
     return result
+class totals:
+    def __init__(self, newWins, newKills, newScore, newMatches, newKDR, newKPM, newWinPercentage):
+        self.wins = newWins
+        self.kills = newKills
+        self.score = newScore
+        self.matches = newMatches
+        self.kdr = newKDR
+        self.kpm = newKPM
+        self.win_percentage = newWinPercentage
+    def setkills(self, kills):
+        self.kills = kills
+    def setwins(self, wins):
+        self.wins = wins
+    def setscore(self, score):
+        self.score = score
+    def setmatches(self, matches):
+        self.matches = matches
+    def setkdr(self, kdr):
+        self.kdr = kdr
+    def setkpm(self, kpm):
+        self.kpm = kpm
+    def setwinpercent(self, winper):
+        self.win_percentage = winper
+    def printAll(self):
+        print("Wins: " + str(self.wins) + " Kills: " + str(self.kills) + " Score: " + str(self.score) + " Matches: " + str(self.matches) + " KDR: " + str(self.kdr) + " KPM: " + str(self.kpm) + " Win%: " + str(self.win_percentage))
+def updateTotals():
+    #get updated info from the fortnite tracker API
+    conn = sqlite3.connect('test.db')
+    c = conn.cursor()
+    req = urllib.request.Request('https://api.fortnitetracker.com/v1/profile/pc/zeevtwitch')
+    req.add_header('TRN-Api-Key', '')
+    req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.113 Safari/537.36')
+    idk = json.load(urllib.request.urlopen(req))
+    index2 = []
+    new = totals(0, 0, 0, 0, 0, 0, 0)
+    for j in idk["lifeTimeStats"]:
+        index2.append(j)
+        print(j)
+    print(index2)
+    for j in index2:
+        if j['key'] == "Kills":
+            new.setkills(int(j['value']))
+        elif j['key'] == "Wins":
+            new.setwins(int(j['value']))
+        elif j['key'] == "Score":
+            new.setscore(str(j['value']))
+        elif j['key'] == "Matches Played":
+            new.setmatches(int(j['value']))
+        elif j['key'] == "Win%":
+            new.setwinpercent(str(j['value']))
+        elif j['key'] == "K/d":
+            new.setkdr(float(j['value']))
+        elif j['key'] == "Kills Per Min":
+            new.setkpm(float(j['value']))
+        else:
+            continue
+    c.execute("SELECT * from global_totals")
+    r = c.fetchone()
+    print(r)
+    old = totals(int(r[0]), int(r[1]), str(r[2]), int(r[3]), float(r[4]), float(r[5]), str(r[6]))
+    old.printAll()
+    new.printAll()
+    result = old
+    if new.kills > old.kills:
+        result.setkills(new.kills)
+    if new.wins > old.wins:
+        result.setwins(new.wins)
+    if new.score != old.score:
+        result.setscore(new.score)
+    if new.matches > old.matches:
+        result.setmatches(new.matches)
+    if new.win_percentage != old.win_percentage:
+        result.setwinpercent(new.win_percentage)
+    if new.kdr > old.kdr:
+        result.setkdr(new.kdr)
+    if new.kpm > old.kpm:
+        result.setkpm(new.kpm)
+    c.execute("UPDATE global_totals SET kills=?, wins=?, score=?, matches=?, kdr=?, kpm=?, win_percentage=?", (result.kills, result.wins, result.score, result.matches, result.kdr, result.kpm, result.win_percentage))
+    conn.commit()
+    conn.close()
+    result.printAll()
+    return

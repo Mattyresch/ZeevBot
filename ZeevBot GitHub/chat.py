@@ -40,6 +40,7 @@ while 1:
         irc.send(bytes('PONG ' + server + '\r\n', 'UTF-8'))
         ##ompareNames(last)
         addPoints(last)
+        updateTotals()
         last = getNames()
         x = random.randint(0, 5)
         if x == 0:
