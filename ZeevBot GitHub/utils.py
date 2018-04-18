@@ -12,19 +12,40 @@ from pprint import pprint
 from bs4 import BeautifulSoup
 
 def loadConfig():
+    """Function used to load user-sensitive data, such as API keys
+
+    :return: User config
+    """
     data = open("config.txt", "r+")
     for line in data:
         temp = line
         cfg = temp.rstrip()
         data.close()
         return cfg
+
 def connect(owner, nick, channel, server, password, port, irc):
+    """Function used to connect to a twitch channel via IRC, used for sending reminders
+
+    :param owner: The "owner" of the bot
+    :param nick: The name of the bot
+    :param channel: The name of the channel you are connecting to
+    :param server: The IRC server you are connecting to
+    :param password: The password for the IRC bot
+    :param port: The port to connect to
+    :param irc: the irc connection object
+    :return:
+    """
     irc.send(bytes('PASS ' + password + '\r\n', 'UTF-8'))
     irc.send(bytes('USER ' + nick + '\r\n', 'UTF-8'))
     irc.send(bytes('NICK ' + nick + '\r\n', 'UTF-8'))
     irc.send(bytes('JOIN ' + channel + '\r\n', 'UTF-8'))
     irc.send(bytes("USER %s %s : %s \r\n" % (nick, server, nick), 'UTF-8'))
 def compareNames(old):
+    """Function used to compare two lists of names in order to distribute points.
+
+    :param old: List of viewers who were present at last check
+    :return: List of the viewers who are still present from time of last check, or error
+    """
     new = getNames()
     try:
         intersect = set(old).intersection(new)
@@ -33,6 +54,11 @@ def compareNames(old):
     except TypeError:
         return "error"
 def addPoints(old):
+    """Function used to add points to a list of users.
+
+    :param old: List of viewers who were present at last check
+    :return:
+    """
     winners = compareNames(old)
     if winners == "error":
         return
@@ -52,6 +78,11 @@ def addPoints(old):
     conn.close()
     return
 def addMessage(user):
+    """Function used to add points to a user when they make a post in chat.
+
+    :param user: The user who made the post
+    :return:
+    """
     conn = sqlite3.connect('bot.db')
     cur = conn.cursor()
     cur.execute("SELECT * FROM points WHERE name LIKE ?", (user,))
@@ -67,6 +98,13 @@ def addMessage(user):
     conn.close()
     return
 def reminder(usr, msg, c):
+    """Function used to set a reminder for the streamer.
+
+    :param usr: user sending the reminder
+    :param msg: the message the user is sending
+    :param c: the channel the user is sending it to
+    :return:
+    """
     owner = 'SirLawlington'
     nick = 'zeevBOT'
     channel = '#zeevtwitch'
@@ -80,6 +118,10 @@ def reminder(usr, msg, c):
     irc.send(bytes('PRIVMSG ' + c + '  :' + str(usr) + ' is reminding you that: ' + str(msg) + '\r\n', 'UTF-8'))
     return
 def getNames():
+    """Function used to get the current viewers for the stream.
+
+    :return: List of viewers OR timeout
+    """
     try:
         viewer_string = json.load(urllib.request.urlopen("https://tmi.twitch.tv/group/user/zeevtwitch/chatters"))
         viewers = viewer_string['chatters']['moderators'] + viewer_string['chatters']['viewers']
@@ -89,6 +131,11 @@ def getNames():
         print("timeout")
         return
 def bP(t):
+    """Function used to get basic arb pairs on bittrex crypto exchange
+
+    :param t: token that you're getting an arb for if available
+    :return: A string of arb opportunity OR timeout
+    """
     now = datetime.datetime.now()
     try:
         token_eth = json.load(urllib.request.urlopen("https://bittrex.com/api/v1.1/public/getticker?&market=ETH-" + t))
@@ -122,6 +169,10 @@ def bP(t):
         ##            file.write("=====================================")
         return(t + " If you buy in terms of BTC, this token will cost $" + str(token_usd_btc) + " In terms of ETH it will cost: $" + str(token_usd_eth) +  " USD profit per " + t + " : $" + str(profit - tx_fee) + " Transaction fee: $" + str(tx_fee))
 def bAAP():
+    """Function used to call bP() for multiple tokens if one fails.
+
+    :return: The first arb pair available
+    """
     # get all possible pairs and info
     tokens = {'SALT'};
     marketSnapshot = json.load(urllib.request.urlopen("https://bittrex.com/api/v1.1/public/getmarkets"))
@@ -152,6 +203,11 @@ def parse(msg):
     msg1['msg'] = message
     return msg1
 def evaluate(msg):
+    """Function used to evaluate if a message is a command or not.
+
+    :param msg: Message which is being evaluated from IRC chat
+    :return: a dict containing the command part, and args part of evaluated message
+    """
     result = dict()
     try:
         if msg[0] == '!':
@@ -181,6 +237,11 @@ def evaluate(msg):
         return
     return
 def checkPriv(user):
+    """Function used to check if a user has privilege to use the bot commands.
+
+    :param user: User who is being checked
+    :return: 1 if user is a mod, 0 if they are not
+    """
     conn = sqlite3.connect('bot.db')
     cur = conn.cursor()
     cur.execute("SELECT * from mods where name like ?", (user,))
@@ -193,6 +254,13 @@ def checkPriv(user):
         conn.close()
         return 0
 def execute(command, args, user):
+    """Function used to execute the command given for the given params
+
+    :param command: Command to execute
+    :param args: Args to pass for command
+    :param user: User who is passing the command
+    :return: The result string for that command
+    """
     c = '#zeevtwitch'
     #check = checkPriv(user)
     conn = sqlite3.connect('bot.db')
@@ -210,6 +278,14 @@ def execute(command, args, user):
         result = bytes('PRIVMSG ' + c + ' :Command help for me is found here: https://pastebin.com/FMeV5rVL \r\n', 'UTF-8')
     elif command == '!sorry':
         result = bytes('PRIVMSG ' + c + ' :Sorry my owner killed you. I would have done it myself, but I have no hands BibleThump\r\n', 'UTF-8')
+    elif command == '!stats':
+        cur.execute("SELECT * FROM global_totals")
+        r = cur.fetchone()
+        temp = totals(int(r[0]), int(r[1]), str(r[2]), int(r[3]), float(r[4]), float(r[5]), str(r[6]))
+        #temp.printAll()
+        s = temp.chatMsg()
+        #print(s)
+        result = bytes('PRIVMSG ' + c + s, 'UTF-8')
     elif command == '!tracker':
         result = bytes('PRIVMSG ' + c + ' : https://fortnitetracker.com/profile/pc/zeevtwitch <- click here for stats\r\n', 'UTF-8')
     elif command == '!wager' or command == '!bet':
@@ -248,18 +324,29 @@ def execute(command, args, user):
                     for b in temp:
                         if b[3] in checks:
                             return bytes('PRIVMSG ' + c + ' :@' + user + ' user already has a bet open on type win/loss. Try over/under, or just wait for Tyler to finish this round.\r\n', 'UTF-8')
-                    cur.execute("SELECT wins, losses FROM state WHERE date=?", (formatted,))
-                    winloss = cur.fetchone()
-                    try:
-                        payout = int((wager * (winloss[1] / winloss[0])) + wager)
+                    cur.execute("SELECT win_percentage FROM global_totals")
+                    r = cur.fetchone()
+                    winloss = r[0]
+                    print(winloss)
+                    wl = int(winloss[0:2])
+                    if type =='win':
+                        payout = int(wager + wager*(100/wl))
                         newbal = bal - wager
-                    except ZeroDivisionError:
-                        payout = wager * 1.5
+                    elif type =='loss':
+                        payout = int(wager + wager*(wl/100))
                         newbal = bal - wager
-                    except TypeError:
-                        payout = bal * (1.5)
-                        newbal = 0
-                        wager = bal
+                    # cur.execute("SELECT wins, losses FROM state WHERE date=?", (formatted,))
+                    # winloss = cur.fetchone()
+                    # try:
+                    #     payout = int((wager * (winloss[1] / winloss[0])) + wager)
+                    #     newbal = bal - wager
+                    # except ZeroDivisionError:
+                    #     payout = wager * 1.5
+                    #     newbal = bal - wager
+                    # except TypeError:
+                    #     payout = bal * (1.5)
+                    #     newbal = 0
+                    #     wager = bal
                     print(user + " bet " + str(wager) + " expected payout of " + str(payout) + " on bet type " + type)
                     cur.execute("INSERT INTO open_bets VALUES (?, ?, ?, ?)", (user, wager, payout ,type))
                     cur.execute("UPDATE points SET points=? WHERE name=?", (newbal, user))
@@ -271,15 +358,18 @@ def execute(command, args, user):
                     for b in temp:
                         if b[3] in checks:
                             return bytes('PRIVMSG ' + c + ' :@' + user + ' user already has a bet open on type over/under. Try win/loss, or just wait for Tyler to finish this round.\r\n', 'UTF-8')
-                    cur.execute("SELECT kills, deaths FROM state WHERE date=?", (formatted,))
-                    killdeath = cur.fetchone()
-                    try:
-                        kd = killdeath[0]/killdeath[1]
-                    except TypeError:
-                        kd = 5
-                    except ZeroDivisionError:
-                        kd = 5
-                    payout = int(wager + (wager * (1/kd)))
+                    # cur.execute("SELECT kills, deaths FROM state WHERE date=?", (formatted,))
+                    # killdeath = cur.fetchone()
+                    cur.execute("SELECT kdr FROM global_totals")
+                    r = cur.fetchone()
+                    kd = r[0]
+                    # try:
+                    #     kd = killdeath[0]/killdeath[1]
+                    # except TypeError:
+                    #     kd = 5
+                    # except ZeroDivisionError:
+                    #     kd = 5
+                    payout = int(wager + int(wager * (1/kd)))
                     newbal = bal - wager
                     print(user + " bet " + str(wager) + " expected payout of " + str(payout) + " on bet type " + type)
                     cur.execute("UPDATE points SET points=? WHERE name=?", (newbal, user))
@@ -288,6 +378,16 @@ def execute(command, args, user):
             else:
                 result = bytes("PRIVMSG " + c + ' :Insufficient balance. Check your ZeevBucks amount again before placing a bet.\r\n', 'UTF-8')
             # print("You bet " + str(wager) + " on bet type " + str(type))
+    elif command == '!odds':
+        cur.execute("SELECT kdr, win_percentage FROM global_totals")
+        r = cur.fetchone()
+        kd = r[0]
+        winper = r[1]
+        wl = winper[0:2]
+        win_odd = round(100/int(wl), 2)
+        lose_odd = round(int(wl)/100, 2)
+        over_odd = round(1/int(kd), 2)
+        result = bytes('PRIVMSG ' + c + ' : Estimated payout for !wager <win> : wager + (wager * ' + str(win_odd) + ') !wager <loss> : wager + (wager * ' + str(lose_odd) +') !wager <over/under> : wager + (wager * ' + str(over_odd) + ')\r\n', 'UTF-8')
     elif command == '!totalwins':
         cur.execute("SELECT SUM(wins) FROM totals")
         row = cur.fetchone()
@@ -692,10 +792,19 @@ class totals:
     def setwinpercent(self, winper):
         self.win_percentage = winper
     def printAll(self):
-        print("Wins: " + str(self.wins) + " Kills: " + str(self.kills) + " Score: " + str(self.score) + " Matches: " + str(self.matches) + " KDR: " + str(self.kdr) + " KPM: " + str(self.kpm) + " Win%: " + str(self.win_percentage))
+        result = (" : Wins: " + str(self.wins) + " Kills: " + str(self.kills) + " Score: " + str(self.score) + " Matches: " + str(self.matches) + " KDR: " + str(self.kdr) + " KPM: " + str(self.kpm) + " Win%: " + str(self.win_percentage))
+        print(result)
+    def chatMsg(self):
+        result = " : Wins: " + str(self.wins) + " Kills: " + str(self.kills) + " Score: " + str(self.score) + " Matches: " + str(self.matches) + " KDR: " + str(self.kdr) + " KPM: " + str(self.kpm) + " Win%: " + str(self.win_percentage) + '\r\n'
+        print(result)
+        return result
 def updateTotals():
+    """Get up to date info from fortnite tracker API, write differences to DB
+    
+    :return:
+    """
     #get updated info from the fortnite tracker API
-    conn = sqlite3.connect('test.db')
+    conn = sqlite3.connect('bot.db')
     c = conn.cursor()
     req = urllib.request.Request('https://api.fortnitetracker.com/v1/profile/pc/zeevtwitch')
     req.add_header('TRN-Api-Key', '')
@@ -705,8 +814,8 @@ def updateTotals():
     new = totals(0, 0, 0, 0, 0, 0, 0)
     for j in idk["lifeTimeStats"]:
         index2.append(j)
-        print(j)
-    print(index2)
+        # print(j)
+    # print(index2)
     for j in index2:
         if j['key'] == "Kills":
             new.setkills(int(j['value']))
@@ -726,24 +835,24 @@ def updateTotals():
             continue
     c.execute("SELECT * from global_totals")
     r = c.fetchone()
-    print(r)
+    # print(r)
     old = totals(int(r[0]), int(r[1]), str(r[2]), int(r[3]), float(r[4]), float(r[5]), str(r[6]))
     old.printAll()
-    new.printAll()
+    # new.printAll()
     result = old
-    if new.kills > old.kills:
+    if new.kills != old.kills:
         result.setkills(new.kills)
-    if new.wins > old.wins:
+    if new.wins != old.wins:
         result.setwins(new.wins)
     if new.score != old.score:
         result.setscore(new.score)
-    if new.matches > old.matches:
+    if new.matches != old.matches:
         result.setmatches(new.matches)
     if new.win_percentage != old.win_percentage:
         result.setwinpercent(new.win_percentage)
-    if new.kdr > old.kdr:
+    if new.kdr != old.kdr:
         result.setkdr(new.kdr)
-    if new.kpm > old.kpm:
+    if new.kpm != old.kpm:
         result.setkpm(new.kpm)
     c.execute("UPDATE global_totals SET kills=?, wins=?, score=?, matches=?, kdr=?, kpm=?, win_percentage=?", (result.kills, result.wins, result.score, result.matches, result.kdr, result.kpm, result.win_percentage))
     conn.commit()
