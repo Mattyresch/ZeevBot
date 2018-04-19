@@ -4,12 +4,43 @@ import time
 import multiprocessing
 import datetime
 from datetime import timedelta
+from datetime import datetime
 import random
 import socket
 import sqlite3
 from threading import Timer
 from pprint import pprint
 from bs4 import BeautifulSoup
+
+
+def getUptime():
+    """Function used to get the stream uptime by making a Twitch API call.
+
+    :return: Uptime or timeout
+    """
+    try:
+        uptime_json = json.load(urllib.request.urlopen("https://api.twitch.tv/kraken/streams/zeevtwitch?client_id="))
+        print(uptime_json['stream']['created_at'])
+        start_time = uptime_json['stream']['created_at']
+        start = datetime.strptime(start_time, '%Y-%m-%dT%H:%M:%SZ')
+        start = start - timedelta(hours=4)
+        # test = start - timedelta(hours=4)
+        # print(test)
+        now = datetime.now()
+        # print(now-test)
+        uptime = now - start
+        s = uptime.seconds
+        hours, remainder = divmod(s, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        if hours == 0:
+            result = str(minutes) + " minutes and " + str(seconds) + " seconds\r\n"
+        else:
+            result = str(hours) + " hours and " + str(minutes) + " minutes.\r\n"
+        print(result)
+        return result
+    except urllib.error.URLError:
+        print("timeout")
+        return
 
 def loadConfig():
     """Function used to load user-sensitive data, such as API keys
@@ -136,7 +167,7 @@ def bP(t):
     :param t: token that you're getting an arb for if available
     :return: A string of arb opportunity OR timeout
     """
-    now = datetime.datetime.now()
+    now = datetime.now()
     try:
         token_eth = json.load(urllib.request.urlopen("https://bittrex.com/api/v1.1/public/getticker?&market=ETH-" + t))
         token_btc = json.load(urllib.request.urlopen("https://bittrex.com/api/v1.1/public/getticker?&market=BTC-" + t))
@@ -266,9 +297,9 @@ def execute(command, args, user):
     conn = sqlite3.connect('bot.db')
     cur = conn.cursor()
     #print(check)
-    date = datetime.datetime.now()
+    date = datetime.now()
     formatted = date.strftime("%Y-%m-%d")
-    yesterday = datetime.datetime.today() - timedelta(days=1)
+    yesterday = datetime.today() - timedelta(days=1)
     yformatted = yesterday.strftime("%Y-%m-%d")
     if command == '!woof':
         result = bytes('PRIVMSG ' + c + ' :FrankerZ\r\n', 'UTF-8')
@@ -278,6 +309,9 @@ def execute(command, args, user):
         result = bytes('PRIVMSG ' + c + ' :Command help for me is found here: https://pastebin.com/FMeV5rVL \r\n', 'UTF-8')
     elif command == '!sorry':
         result = bytes('PRIVMSG ' + c + ' :Sorry my owner killed you. I would have done it myself, but I have no hands BibleThump\r\n', 'UTF-8')
+    elif command == '!uptime':
+        temp = getUptime()
+        result = bytes('PRIVMSG ' + c + ' :Zeev has been streaming for ' + temp, 'UTF-8')
     elif command == '!stats':
         cur.execute("SELECT * FROM global_totals")
         r = cur.fetchone()
@@ -800,14 +834,14 @@ class totals:
         return result
 def updateTotals():
     """Get up to date info from fortnite tracker API, write differences to DB
-    
+
     :return:
     """
     #get updated info from the fortnite tracker API
     conn = sqlite3.connect('bot.db')
     c = conn.cursor()
     req = urllib.request.Request('https://api.fortnitetracker.com/v1/profile/pc/zeevtwitch')
-    req.add_header('TRN-Api-Key', '')
+    req.add_header('TRN-Api-Key', '477aaed9-a077-4847-87b1-53e6fa6ac92c')
     req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.113 Safari/537.36')
     idk = json.load(urllib.request.urlopen(req))
     index2 = []
