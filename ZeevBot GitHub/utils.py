@@ -12,6 +12,22 @@ from threading import Timer
 from pprint import pprint
 from bs4 import BeautifulSoup
 
+def getFollowers():
+    """Function used to get the number of followers for the stream, and display in chat.
+
+    :return: Number of followers in a string along with the number of followers remaining until the giveaway, or nothing if error
+    """
+    try:
+        test_json = json.load(urllib.request.urlopen(
+            "https://api.twitch.tv/kraken/channels/zeevtwitch?client_id="))
+        followers = test_json['followers']
+        result = "Zeev has " + str(followers) + " followers at the moment, only " + str(
+            1000 - int(followers)) + " until the giveaway!\r\n"
+        print(result)
+        return result
+    except urllib.error.URLError:
+        print("timeout")
+        return
 
 def getUptime():
     """Function used to get the stream uptime by making a Twitch API call.
@@ -312,6 +328,9 @@ def execute(command, args, user):
     elif command == '!uptime':
         temp = getUptime()
         result = bytes('PRIVMSG ' + c + ' :Zeev has been streaming for ' + temp, 'UTF-8')
+    elif command == '!followers':
+        temp = getFollowers()
+        result = bytes('PRIVMSG ' + c + ' : ' + temp, 'UTF-8')
     elif command == '!stats':
         cur.execute("SELECT * FROM global_totals")
         r = cur.fetchone()
