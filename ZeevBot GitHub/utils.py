@@ -12,6 +12,7 @@ from threading import Timer
 from pprint import pprint
 from bs4 import BeautifulSoup
 
+
 def getFollowers():
     """Function used to get the number of followers for the stream, and display in chat.
 
@@ -341,6 +342,43 @@ def execute(command, args, user):
         result = bytes('PRIVMSG ' + c + s, 'UTF-8')
     elif command == '!tracker':
         result = bytes('PRIVMSG ' + c + ' : https://fortnitetracker.com/profile/pc/zeevtwitch <- click here for stats\r\n', 'UTF-8')
+    elif command == '!sendzeevbux' or command == '!send':
+        if (args==''):
+            result = bytes('PRIVMSG ' + c + ' :@' + user + ' improper usage. Check your balance with !zeevbux, then try sending again with !send <user> <amount>.\r\n', 'UTF-8')
+        else:
+            temp = str(args).partition(' ')
+            try:
+                cur.execute("SELECT points FROM points WHERE name=?", (user,))
+                check = cur.fetchone()
+                print(check)
+                amt_in_acc = int(check[0])
+                amt_sent = int(temp[2])
+            except ValueError:
+                if str(temp[2]) == 'all':
+                    cur.execute("SELECT points FROM points WHERE name=?", (user,))
+                    check = cur.fetchone()
+                    amt_sent = int(check[0])
+                    amt_in_acc = amt_sent
+                else:
+                    return bytes('PRIVMSG ' + c + ' :@' + user + ' improper usage. Try !send <recipient><amount>\r\n', 'UTF-8')
+            if amt_sent <= 0:
+                result = bytes('PRIVMSG ' + c + ' :@' + user + ' improper usage. Cannot send a non-positive amount of ZeevBux.\r\n', 'UTF-8')
+            elif amt_sent > amt_in_acc:
+                result = bytes('PRIVMSG ' + c + ' :@' + user + ' ERROR: Cannot send more ZeevBux than you have in your account. Check your balance before trying again.\r\n', 'UTF-8')
+            else:
+                sender_new_bal = amt_in_acc - amt_sent
+                recipient = str(temp[0])
+                cur.execute("SELECT points FROM points WHERE name=?", (recipient,))
+                check = cur.fetchone()
+                print(check)
+                if check==None:
+                    cur.execute("INSERT INTO points VALUES (?, ?, ?)", (recipient, amt_sent, 0))
+                else:
+                    recipient_new_bal = int(check[0]) + amt_sent
+                    cur.execute("UPDATE points SET points=? WHERE name=?", (recipient_new_bal, recipient))
+                cur.execute("UPDATE points SET points=? WHERE name=?", (sender_new_bal, user))
+                result = bytes('PRIVMSG ' + c + ' :@' + user + ' just sent ' + str(amt_sent) + ' Zeevbux to @' + recipient + '.\r\n', 'UTF-8')
+
     elif command == '!wager' or command == '!bet':
         cur.execute("SELECT bet_flag FROM flags")
         value = cur.fetchone()
@@ -355,6 +393,8 @@ def execute(command, args, user):
             try:
                 cur.execute("SELECT points FROM points WHERE name=?", (user,))
                 wager = int(temp[0])
+                if(wager<=0):
+                    return bytes('PRIVMSG ' + c + ' :@' + user + ' improper usage. Check your balance with !zeevbux, then place a wager using <!wager or !bet> <amount or "all"><over/under/win/loss>\r\n', 'UTF-8')
                 balance = cur.fetchone()
                 bal = int(balance[0])
             except ValueError:
@@ -446,6 +486,24 @@ def execute(command, args, user):
         row = cur.fetchone()
         wins = str(row[0])
         result = bytes('PRIVMSG ' + c + ' :Total wincount for Zeevtwitch: ' + wins + '\r\n', 'UTF-8')
+    elif command == '!top5':
+        cur.execute("SELECT * FROM points WHERE NAME NOT LIKE '%BOT' ORDER BY points DESC LIMIT 5")
+        rows = cur.fetchall()
+        count = 0
+        for r in rows:
+            count += 1
+            if count == 1:
+                res_str = " :1st: @" + r[0] + " ZeevBux: " + str(r[1])
+            elif count == 2:
+                res_str += ", 2nd: @" + r[0] + " ZeevBux: " + str(r[1])
+            elif count == 3:
+                res_str += ", 3rd: @" + r[0] + " ZeevBux: " + str(r[1])
+            elif count == 4:
+                res_str += ", 4th: @" + r[0] + " ZeevBux: " + str(r[1])
+            elif count == 5:
+                res_str += ", 5th: @" + r[0] + " Zeevbux: " + str(r[1]) + "\r\n"
+        result = bytes('PRIVMSG ' + c + res_str, 'UTF-8')
+        print(result)
     elif command == '!burpcount':
         cur.execute("SELECT burps FROM state")
         row = cur.fetchone()
@@ -859,12 +917,13 @@ def updateTotals():
     #get updated info from the fortnite tracker API
     conn = sqlite3.connect('bot.db')
     c = conn.cursor()
-    req = urllib.request.Request('https://api.fortnitetracker.com/v1/profile/pc/zeevtwitch')
-    req.add_header('TRN-Api-Key', '477aaed9-a077-4847-87b1-53e6fa6ac92c')
+    req = urllib.request.Request('https://api.fortnitetracker.com/v1/profile/pc/TwitchZeevtwitch')
+    req.add_header('TRN-Api-Key', '')
     req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.113 Safari/537.36')
     idk = json.load(urllib.request.urlopen(req))
     index2 = []
     new = totals(0, 0, 0, 0, 0, 0, 0)
+
     for j in idk["lifeTimeStats"]:
         index2.append(j)
         # print(j)
