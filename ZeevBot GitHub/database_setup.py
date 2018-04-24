@@ -17,6 +17,11 @@ mods = [("capta1n_cypher", ), ("casper026", ), ("dennischirino", ), ("forestna",
         ("nordicevan", ), ("ogkickback", ), ("ph0enixb1ood", ), ("poacher117", ), ("secko", ), ("sirlawlington", ),
         ("tex99", ), ("thewhitegamer05", ), ("ukko", ), ("ultra_spaz", ), ("whale728", ), ("willsquill", ), ("xliattttt", ), ("yerrowfever", ), ("zeevbot", ), ("zeevtwitch")]
 c.executemany("INSERT INTO mods(name) VALUES (?)", mods)
+c.execute("UPDATE points SET points = 1000 WHERE name='sirlawlington'")
 c.execute("INSERT into state VALUES ('2018-04-05', 100, 14, 8, 4, 0, 0, '', '', '')")
+c.execute("ALTER TABLE points RENAME TO users")
+c.execute("ALTER TABLE users ADD is_mod integer")
+c.execute("ALTER TABLE users ADD is_sub integer")
+c.execute("ALTER TABLE users ADD trivia_wins integer")
 conn.commit()
 conn.close()
