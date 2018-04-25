@@ -62,6 +62,14 @@ while 1:
     try:
         if evaluated['command'] == 'NONE':
             addMessage(parsed['user'])
+            cur.execute("SELECT trivia_flag FROM flags")
+            r = cur.fetchone()
+            trivia_flag = r[0]
+            if trivia_flag == 1:
+                check = checkAnswers(parsed['msg'])
+                if check == 1:
+                    output = correctTriviaQuestion(parsed['user'], channel)
+                    irc.send(output)
             continue
         else:
          output = execute(evaluated['command'], evaluated['args'], parsed['user'])

@@ -323,6 +323,143 @@ def checkPriv(user):
     else:
         conn.close()
         return 0
+
+def correctTriviaQuestion(user, channel):
+    """Function used to award points and increment things when a trivia question is answered correctly
+
+    :param user: user who got the question right
+    :param channel: channel name
+    :return: response message
+    """
+    conn = sqlite3.connect('bot.db')
+    c = conn.cursor()
+    c.execute("SELECT * FROM users WHERE name=?", (user,))
+    res = c.fetchone()
+    balance = res[1]
+    newbal = balance + 250
+    wins = res[5]
+    wins += 1
+    c.execute("UPDATE users SET points=?, trivia_wins=? WHERE name=?", (newbal, wins, user))
+    c.execute("SELECT count FROM trivia")
+    temp = c.fetchone()
+    count = temp[0]
+    print(count)
+    if count == 2:
+        result = bytes('PRIVMSG ' + channel + ' :@' + user + ' got the final trivia question right for this game, taking home 250 Zeevbux!\r\n','UTF-8')
+        c.execute("UPDATE trivia SET q1=' ', q2=' ', q3=' ', a1=' ', a2=' ', a3=' ', count=0")
+        c.execute("UPDATE flags SET trivia_flag=0")
+        conn.commit()
+        conn.close()
+        print(result)
+        return result
+    elif count == 1:
+        result = 'PRIVMSG ' + channel + ' :@' + user + ' got the 2nd question right, 250 Zeevbux are headed to your account! Next question: '
+        c.execute("SELECT q3 FROM trivia")
+        temp = c.fetchone()
+        q = temp[0]
+        result = result + q + '\r\n'
+    elif count == 0:
+        result = 'PRIVMSG ' + channel + ' :@' + user + ' got the 1st question right, 250 Zeevbux are headed to your account! Next question: '
+        c.execute("SELECT q2 FROM trivia")
+        temp = c.fetchone()
+        q = temp[0]
+        result = result + q + '\r\n'
+    count += 1
+    c.execute("UPDATE trivia SET count=?", (count,))
+    conn.commit()
+    conn.close()
+    print(result)
+    return bytes(result, 'UTF-8')
+
+def checkAnswers(message):
+    """Function used to check the message for the answer to the current trivia question.
+
+    :param message: message to search for the answer in
+    :return: 1 if right, 0 if wrong
+    """
+    conn = sqlite3.connect('bot.db')
+    c = conn.cursor()
+    c.execute("SELECT * FROM trivia")
+    result = c.fetchone()
+    round_number = int(result[6])
+    if round_number == 0:
+        answer = result[3]
+    elif round_number == 1:
+        answer = result[4]
+    elif round_number == 2:
+        answer = result[5]
+    if message.find(answer) != -1:
+        print('yay u got it right')
+        return 1
+    else:
+        return 0
+
+def getCurrentQuestion(channel):
+    """Function used to get the current question
+
+    :param channel: channel to post response to
+    :return: response message string
+    """
+    conn = sqlite3.connect('bot.db')
+    c = conn.cursor()
+    c.execute("SELECT * FROM trivia")
+    result = c.fetchone()
+    round_number = int(result[6])
+    question = str('PRIVMSG ' + channel + ' : ' + result[round_number])
+    print(question)
+    return question
+
+def getTriviaQuestions():
+    """Function used to to pull trivia questions from the API and move them into DB.
+
+    :return: response message
+    """
+    conn = sqlite3.connect('bot.db')
+    c = conn.cursor()
+    c.execute("SELECT trivia_flag FROM flags")
+    r = c.fetchone()
+    flag = r[0]
+    if flag == 1:
+        msg = ' :Trivia game already in progress!\r\n'
+        conn.close()
+        return(msg)
+    response = json.load(urllib.request.urlopen('https://opentdb.com/api.php?amount=3&category=15&difficulty=easy&type=multiple'))
+    print(response)
+    count = 0
+    result = []
+    for i in response['results']:
+        q = str(BeautifulSoup(i['question'], "html.parser"))
+        a = str(BeautifulSoup(i['correct_answer'], "html.parser"))
+        if q.startswith("Which of the"):
+            count = 0
+            x = random.randint(0, 2)
+            print(x)
+            for j in i['incorrect_answers']:
+                # print(j)
+                if count == x:
+                    q = q + " " + str(a) + ", "
+                if count == 2:
+                    q = q + " " + j
+                else:
+                    q = q + " " + j + ", "
+                count+=1
+        q = str(BeautifulSoup(q, "html.parser"))
+        temp = (q, a)
+        result.append(temp)
+    print(result)
+    q1 = result[0][0]
+    q2 = result[1][0]
+    q3 = result[2][0]
+    a1 = result[0][1]
+    a2 = result[1][1]
+    a3 = result[2][1]
+    c.execute("UPDATE trivia SET q1=?, q2=?, q3=?, a1=?, a2=?, a3=?, count=0", (q1, q2, q3, a1, a2, a3))
+    c.execute("UPDATE flags SET trivia_flag=1")
+    conn.commit()
+    conn.close()
+    msg = ' :Trivia started! First question: ' + q1 + '\r\n'
+    return msg
+
 def execute(command, args, user):
     """Function used to execute the command given for the given params
 
@@ -340,8 +477,15 @@ def execute(command, args, user):
     formatted = date.strftime("%Y-%m-%d")
     yesterday = datetime.today() - timedelta(days=1)
     yformatted = yesterday.strftime("%Y-%m-%d")
+    command = str(command).lower()
     if command == '!woof':
         result = bytes('PRIVMSG ' + c + ' :FrankerZ\r\n', 'UTF-8')
+    elif command == '!trivia' or command == '!starttrivia':
+        result = 'PRIVMSG ' + c
+        temp = getTriviaQuestions()
+        result = bytes(result + temp, 'UTF-8')
+    elif command == '!question' or command == '!currentquestion':
+        result = bytes(getCurrentQuestion(c) + '\r\n', 'UTF-8')
     elif command == '!woodenspoon':
         result = bytes('PRIVMSG ' + c + ' :You made ' + str(user) + ' mad--better run quick, they are going to get the wooden spoon!\r\n', 'UTF-8')
     elif command == '!help' or command == '!commands':
@@ -400,7 +544,6 @@ def execute(command, args, user):
                     cur.execute("UPDATE users SET points=? WHERE name=?", (recipient_new_bal, recipient))
                 cur.execute("UPDATE users SET points=? WHERE name=?", (sender_new_bal, user))
                 result = bytes('PRIVMSG ' + c + ' :@' + user + ' just sent ' + str(amt_sent) + ' Zeevbux to @' + recipient + '.\r\n', 'UTF-8')
-
     elif command == '!wager' or command == '!bet':
         cur.execute("SELECT bet_flag FROM flags")
         value = cur.fetchone()
