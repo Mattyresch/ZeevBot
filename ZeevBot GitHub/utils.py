@@ -19,24 +19,23 @@ def getFollowers():
     :return: Number of followers in a string along with the number of followers remaining until the giveaway, or nothing if error
     """
     try:
-        test_json = json.load(urllib.request.urlopen(
-            "https://api.twitch.tv/kraken/channels/zeevtwitch?client_id="))
-        followers = test_json['followers']
-        result = "Zeev has " + str(followers) + " followers at the moment, only " + str(
-            1000 - int(followers)) + " until the giveaway!\r\n"
-        print(result)
+        key = loadTwitchAPI()
+        response = json.load(urllib.request.urlopen("https://api.twitch.tv/kraken/channels/zeevtwitch?" + key))
+        followers = response['followers']
+        result = "Zeev has " + str(followers) + " followers at the moment, only " + str(1000 - int(followers)) + " until the giveaway!\r\n"
+        # print(result)
         return result
     except urllib.error.URLError:
         print("timeout")
         return
-
 def getUptime():
     """Function used to get the stream uptime by making a Twitch API call.
 
     :return: Uptime or timeout
     """
     try:
-        uptime_json = json.load(urllib.request.urlopen("https://api.twitch.tv/kraken/streams/zeevtwitch?client_id="))
+        key = loadTwitchAPI()
+        uptime_json = json.load(urllib.request.urlopen("https://api.twitch.tv/kraken/streams/zeevtwitch?" + key))
         print(uptime_json['stream']['created_at'])
         start_time = uptime_json['stream']['created_at']
         start = datetime.strptime(start_time, '%Y-%m-%dT%H:%M:%SZ')
@@ -58,19 +57,42 @@ def getUptime():
     except urllib.error.URLError:
         print("timeout")
         return
+def loadTRNAPI():
+    """Function used to load user-sensitive data, in this case the TRN API key
 
-def loadConfig():
-    """Function used to load user-sensitive data, such as API keys
-
-    :return: User config
+    :return: TRN API key from config.txt
     """
     data = open("config.txt", "r+")
     for line in data:
         temp = line
-        cfg = temp.rstrip()
-        data.close()
-        return cfg
+        if temp.startswith('TRN-API-KEY'):
+            key = temp.partition(':')
+    data.close()
+    return key
+def loadTwitchAPI():
+    """Function used to load user-sensitive data, in this case the users Kraken API key
 
+    :return: User Kraken API key from config.txt
+    """
+    data = open("config.txt", "r+")
+    for line in data:
+        temp = line
+        if temp.startswith('client_id='):
+            key = temp.rstrip()
+    data.close()
+    return key
+def loadPass():
+    """Function used to load user-sensitive data, in this case the oauth for twitch.tv
+
+    :return: User oauth for twitch chat, from config.txt
+    """
+    data = open("config.txt", "r+")
+    for line in data:
+        temp = line
+        if temp.startswith('oauth'):
+            cfg = temp.rstrip()
+    data.close()
+    return cfg
 def connect(owner, nick, channel, server, password, port, irc):
     """Function used to connect to a twitch channel via IRC, used for sending reminders
 
@@ -157,7 +179,7 @@ def reminder(usr, msg, c):
     nick = 'zeevBOT'
     channel = '#zeevtwitch'
     server = 'irc.twitch.tv'
-    password = loadConfig()
+    password = loadPass()
 
     port = 6667
     irc = socket.socket()
@@ -341,7 +363,7 @@ def execute(command, args, user):
         #print(s)
         result = bytes('PRIVMSG ' + c + s, 'UTF-8')
     elif command == '!tracker':
-        result = bytes('PRIVMSG ' + c + ' : https://fortnitetracker.com/profile/pc/twitchtvzeevtwitch <- click here for stats\r\n', 'UTF-8')
+        result = bytes('PRIVMSG ' + c + ' : https://fortnitetracker.com/profile/pc/twitchzeevtwitch <- click here for stats\r\n', 'UTF-8')
     elif command == '!sendzeevbux' or command == '!send':
         if (args==''):
             result = bytes('PRIVMSG ' + c + ' :@' + user + ' improper usage. Check your balance with !zeevbux, then try sending again with !send <user> <amount>.\r\n', 'UTF-8')
@@ -443,7 +465,7 @@ def execute(command, args, user):
                     print(user + " bet " + str(wager) + " expected payout of " + str(payout) + " on bet type " + type)
                     cur.execute("INSERT INTO open_bets VALUES (?, ?, ?, ?)", (user, wager, payout ,type))
                     cur.execute("UPDATE users SET points=? WHERE name=?", (newbal, user))
-                    result = bytes('PRIVMSG ' + c + ' :@' + user + ' just bet ' + str(wager) + ' ZeevBucks that Zeev will ' + type + ' their next game, with an expected payout of ' + str(payout) + ' if they are right\r\n', 'UTF-8')
+                    result = bytes('PRIVMSG ' + c + ' :@' + user + ' just bet ' + str(wager) + ' ZeevBucks that Zeev will get a ' + type + ' their next game, with an expected payout of ' + str(payout) + ' if they are right\r\n', 'UTF-8')
                 elif type=='over' or type=='under':
                     checks = {'under', 'over'}
                     cur.execute("SELECT * from open_bets WHERE name=?", (user,))
@@ -487,7 +509,7 @@ def execute(command, args, user):
         wins = str(row[0])
         result = bytes('PRIVMSG ' + c + ' :Total wincount for Zeevtwitch: ' + wins + '\r\n', 'UTF-8')
     elif command == '!top5':
-        cur.execute("SELECT * FROM users WHERE NAME NOT LIKE '%BOT' ORDER BY points DESC LIMIT 5")
+        cur.execute("SELECT * FROM users WHERE NAME NOT LIKE '%BOT' AND NAME NOT LIKE '%zeevtwitch' ORDER BY points DESC LIMIT 5")
         rows = cur.fetchall()
         count = 0
         for r in rows:
@@ -917,8 +939,9 @@ def updateTotals():
     #get updated info from the fortnite tracker API
     conn = sqlite3.connect('bot.db')
     c = conn.cursor()
+    key = loadTRNAPI()
     req = urllib.request.Request('https://api.fortnitetracker.com/v1/profile/pc/TwitchZeevtwitch')
-    req.add_header('TRN-Api-Key', '')
+    req.add_header(key[0], key[2])
     req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.113 Safari/537.36')
     idk = json.load(urllib.request.urlopen(req))
     index2 = []

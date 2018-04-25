@@ -18,7 +18,7 @@ owner ='SirLawlington'
 nick = 'zeevBOT'
 channel ='#zeevtwitch'
 server = 'irc.twitch.tv'
-password = loadConfig()
+password = loadPass()
 port = 6667
 inputBuffer=""
 irc = socket.socket()
@@ -30,7 +30,7 @@ irc.send(bytes('NICK ' + nick + '\r\n', 'UTF-8'))
 irc.send(bytes('JOIN ' + channel + '\r\n', 'UTF-8'))
 irc.send(bytes("USER %s %s : %s \r\n" %(nick, server, nick), 'UTF-8'))
 last = getNames()
-
+updateTotals()
 while 1:
     ircmessage = irc.recv(2048).decode("UTF-8", errors="ignore")
     ircmessage = ircmessage.strip('\n\r')
