@@ -323,7 +323,6 @@ def checkPriv(user):
     else:
         conn.close()
         return 0
-
 def correctTriviaQuestion(user, channel):
     """Function used to award points and increment things when a trivia question is answered correctly
 
@@ -370,7 +369,6 @@ def correctTriviaQuestion(user, channel):
     conn.close()
     print(result)
     return bytes(result, 'UTF-8')
-
 def checkAnswers(message):
     """Function used to check the message for the answer to the current trivia question.
 
@@ -393,7 +391,6 @@ def checkAnswers(message):
         return 1
     else:
         return 0
-
 def getCurrentQuestion(channel):
     """Function used to get the current question
 
@@ -408,7 +405,6 @@ def getCurrentQuestion(channel):
     question = str('PRIVMSG ' + channel + ' : ' + result[round_number])
     print(question)
     return question
-
 def getTriviaQuestions():
     """Function used to to pull trivia questions from the API and move them into DB.
 
@@ -459,7 +455,36 @@ def getTriviaQuestions():
     conn.close()
     msg = ' :Trivia started! First question: ' + q1 + '\r\n'
     return msg
-
+def skipTriviaQuestion(user, channel):
+    conn = sqlite3.connect('bot.db')
+    c = conn.cursor()
+    c.execute("SELECT count FROM trivia")
+    r = c.fetchone()
+    temp = r[0]
+    print(temp)
+    if temp == 2:
+        result = 'PRIVMSG ' + channel + ' :@' + user + ' gave up on the final question, what a quitter DansGame\r\n'
+        c.execute("UPDATE trivia SET q1=' ', q2=' ', q3=' ', a1=' ', a2=' ', a3=' ', count=0")
+        c.execute("UPDATE flags SET trivia_flag=0")
+        conn.commit()
+        conn.close()
+        print(result)
+        return result
+    else:
+        new_count = r[0] + 1
+        c.execute("UPDATE trivia SET count=?", (new_count, ))
+        c.execute("SELECT q2, q3 FROM trivia")
+        r2 = c.fetchone()
+        result = 'PRIVMSG ' + channel + ' :@' + user + ' gave up on the question, on to the next one ResidentSleeper '
+        if new_count==1:
+            q = r2[0]
+        elif new_count==2:
+            q = r2[1]
+        result = result + q + '\r\n'
+        conn.commit()
+        conn.close()
+        print(result)
+        return result
 def execute(command, args, user):
     """Function used to execute the command given for the given params
 
@@ -486,6 +511,8 @@ def execute(command, args, user):
         result = bytes(result + temp, 'UTF-8')
     elif command == '!question' or command == '!currentquestion':
         result = bytes(getCurrentQuestion(c) + '\r\n', 'UTF-8')
+    elif command == '!skip' or command == '!skipquestion':
+        result = bytes(skipTriviaQuestion(user, c), 'UTF-8')
     elif command == '!woodenspoon':
         result = bytes('PRIVMSG ' + c + ' :You made ' + str(user) + ' mad--better run quick, they are going to get the wooden spoon!\r\n', 'UTF-8')
     elif command == '!help' or command == '!commands':
