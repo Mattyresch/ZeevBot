@@ -332,10 +332,21 @@ def correctTriviaQuestion(user, channel):
     """
     conn = sqlite3.connect('bot.db')
     c = conn.cursor()
+    c.execute("SELECT difficulty FROM trivia")
+    r = c.fetchone()
+    difficulty = r[0]
     c.execute("SELECT * FROM users WHERE name=?", (user,))
     res = c.fetchone()
     balance = res[1]
-    newbal = balance + 250
+    if difficulty=='easy':
+        reward = 75
+    elif difficulty=='medium':
+        reward = 150
+    elif difficulty=='hard':
+        reward = 250
+    else:
+        reward = 75
+    newbal = balance + reward
     wins = res[5]
     wins += 1
     c.execute("UPDATE users SET points=?, trivia_wins=? WHERE name=?", (newbal, wins, user))
@@ -344,21 +355,21 @@ def correctTriviaQuestion(user, channel):
     count = temp[0]
     print(count)
     if count == 2:
-        result = bytes('PRIVMSG ' + channel + ' :@' + user + ' got the final trivia question right for this game, taking home 250 Zeevbux!\r\n','UTF-8')
-        c.execute("UPDATE trivia SET q1=' ', q2=' ', q3=' ', a1=' ', a2=' ', a3=' ', count=0")
+        result = bytes('PRIVMSG ' + channel + ' :@' + user + ' got the final trivia question right for this game, taking home '+ str(reward) +' Zeevbux!\r\n','UTF-8')
+        c.execute("UPDATE trivia SET q1=' ', q2=' ', q3=' ', a1=' ', a2=' ', a3=' ', count=0, difficulty=' '")
         c.execute("UPDATE flags SET trivia_flag=0")
         conn.commit()
         conn.close()
         print(result)
         return result
     elif count == 1:
-        result = 'PRIVMSG ' + channel + ' :@' + user + ' got the 2nd question right, 250 Zeevbux are headed to your account! Next question: '
+        result = 'PRIVMSG ' + channel + ' :@' + user + ' got the 2nd question right, ' + str(reward) + ' Zeevbux are headed to your account! Next question: '
         c.execute("SELECT q3 FROM trivia")
         temp = c.fetchone()
         q = temp[0]
         result = result + q + '\r\n'
     elif count == 0:
-        result = 'PRIVMSG ' + channel + ' :@' + user + ' got the 1st question right, 250 Zeevbux are headed to your account! Next question: '
+        result = 'PRIVMSG ' + channel + ' :@' + user + ' got the 1st question right, ' + str(reward) + ' Zeevbux are headed to your account! Next question: '
         c.execute("SELECT q2 FROM trivia")
         temp = c.fetchone()
         q = temp[0]
@@ -380,12 +391,14 @@ def checkAnswers(message):
     c.execute("SELECT * FROM trivia")
     result = c.fetchone()
     round_number = int(result[6])
+    message = str(message).lower()
     if round_number == 0:
         answer = result[3]
     elif round_number == 1:
         answer = result[4]
     elif round_number == 2:
         answer = result[5]
+    answer = str(answer).lower()
     if message.find(answer) != -1:
         print('yay u got it right')
         return 1
@@ -405,8 +418,8 @@ def getCurrentQuestion(channel):
     question = str('PRIVMSG ' + channel + ' : ' + result[round_number])
     print(question)
     return question
-def getTriviaQuestions():
-    """Function used to to pull trivia questions from the API and move them into DB.
+def getTriviaQuestions(args):
+    """Function used to to pull trivia questions from the API and move them into DB. !trivia <category> <difficulty>
 
     :return: response message
     """
@@ -415,11 +428,36 @@ def getTriviaQuestions():
     c.execute("SELECT trivia_flag FROM flags")
     r = c.fetchone()
     flag = r[0]
+    accepted_categories = {'sports', 'videogames', 'general', 'movies', 'games'}
+    accepted_difficulties = {'easy', 'medium', 'hard'}
     if flag == 1:
         msg = ' :Trivia game already in progress!\r\n'
         conn.close()
         return(msg)
-    response = json.load(urllib.request.urlopen('https://opentdb.com/api.php?amount=3&category=15&difficulty=easy&type=multiple'))
+    if (args == ''):
+        response = json.load(urllib.request.urlopen('https://opentdb.com/api.php?amount=3&category=15&difficulty=easy&type=multiple'))
+        difficulty = 'easy'
+    else:
+        temp = str(args).partition(' ')
+        difficulty = temp[2]
+        category = temp[0]
+        print(category)
+        print(difficulty)
+        if category not in accepted_categories:
+            response = json.load(urllib.request.urlopen('https://opentdb.com/api.php?amount=3&category=15&difficulty=easy&type=multiple'))
+        else:
+            if category == 'sports':
+                cat_num = 21
+            elif category == 'videogames' or category=='games':
+                cat_num = 15
+            elif category == 'movies':
+                cat_num = 11
+            else:
+                cat_num = 9
+            if difficulty not in accepted_difficulties:
+                difficulty = 'easy'
+            response = json.load(urllib.request.urlopen('https://opentdb.com/api.php?amount=3&category='+str(cat_num)+'&difficulty='+str(difficulty)+'&type=multiple'))
+            # response = json.load(urllib.request.urlopen('https://opentdb.com/api.php?amount=3&category=15&difficulty=easy&type=multiple'))
     print(response)
     count = 0
     result = []
@@ -449,13 +487,19 @@ def getTriviaQuestions():
     a1 = result[0][1]
     a2 = result[1][1]
     a3 = result[2][1]
-    c.execute("UPDATE trivia SET q1=?, q2=?, q3=?, a1=?, a2=?, a3=?, count=0", (q1, q2, q3, a1, a2, a3))
+    c.execute("UPDATE trivia SET q1=?, q2=?, q3=?, a1=?, a2=?, a3=?, count=0, difficulty=?", (q1, q2, q3, a1, a2, a3, difficulty))
     c.execute("UPDATE flags SET trivia_flag=1")
     conn.commit()
     conn.close()
     msg = ' :Trivia started! First question: ' + q1 + '\r\n'
     return msg
 def skipTriviaQuestion(user, channel):
+    """Function used to skip a trivia question
+
+    :param user: user skipping the question
+    :param channel: channel name
+    :return: result string
+    """
     conn = sqlite3.connect('bot.db')
     c = conn.cursor()
     c.execute("SELECT count FROM trivia")
@@ -507,7 +551,7 @@ def execute(command, args, user):
         result = bytes('PRIVMSG ' + c + ' :FrankerZ\r\n', 'UTF-8')
     elif command == '!trivia' or command == '!starttrivia':
         result = 'PRIVMSG ' + c
-        temp = getTriviaQuestions()
+        temp = getTriviaQuestions(args)
         result = bytes(result + temp, 'UTF-8')
     elif command == '!question' or command == '!currentquestion':
         result = bytes(getCurrentQuestion(c) + '\r\n', 'UTF-8')
@@ -516,7 +560,7 @@ def execute(command, args, user):
     elif command == '!woodenspoon':
         result = bytes('PRIVMSG ' + c + ' :You made ' + str(user) + ' mad--better run quick, they are going to get the wooden spoon!\r\n', 'UTF-8')
     elif command == '!help' or command == '!commands':
-        result = bytes('PRIVMSG ' + c + ' :Command help for me is found here: https://pastebin.com/FMeV5rVL \r\n', 'UTF-8')
+        result = bytes('PRIVMSG ' + c + ' :Command help for me is found here: https://pastebin.com/8KFMTMfE \r\n', 'UTF-8')
     elif command == '!sorry':
         result = bytes('PRIVMSG ' + c + ' :Sorry my owner killed you. I would have done it myself, but I have no hands BibleThump\r\n', 'UTF-8')
     elif command == '!uptime':
@@ -1003,7 +1047,7 @@ def execute(command, args, user):
             result = bytes('PRIVMSG ' + c + ' :Zeev is currently playing squads with ' + row[0] + ' and ' + row[1] + '\r\n', 'UTF-8')
         elif(row[0]!='' and row[1]!='' and row[2]!=''):
             result = bytes('PRIVMSG ' + c + ' :Zeev is currently playing squads with ' + row[0] +', ' + row[1] + ' and ' + row[2] + '\r\n', 'UTF-8')
-    elif command == '!newStream':
+    elif command == '!newstream':
         cur.execute("SELECT * from state")
         row = cur.fetchone()
         if(row[0] == formatted):
