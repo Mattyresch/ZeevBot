@@ -1,5 +1,6 @@
 import json
 import urllib.request
+import urllib.error
 import time
 import multiprocessing
 import datetime
@@ -22,7 +23,7 @@ def getFollowers():
         key = loadTwitchAPI()
         response = json.load(urllib.request.urlopen("https://api.twitch.tv/kraken/channels/zeevtwitch?" + key))
         followers = response['followers']
-        result = "Zeev has " + str(followers) + " followers at the moment, only " + str(1000 - int(followers)) + " until the giveaway!\r\n"
+        result = "Zeev has " + str(followers) + " followers at the moment!\r\n"
         # print(result)
         return result
     except urllib.error.URLError:
@@ -185,7 +186,7 @@ def reminder(usr, msg, c):
     irc = socket.socket()
     irc.connect((server, port))
     connect(owner, nick, channel, server, password, port, irc)
-    irc.send(bytes('PRIVMSG ' + c + '  :' + str(usr) + ' is reminding you that: ' + str(msg) + '\r\n', 'UTF-8'))
+    irc.send(bytes('PRIVMSG ' + c + '  :' + str(usr) + ' sent you a reminder, here it is: ' + str(msg) + '\r\n', 'UTF-8'))
     return
 def getNames():
     """Function used to get the current viewers for the stream.
@@ -464,7 +465,7 @@ def getTriviaQuestions(args):
     for i in response['results']:
         q = str(BeautifulSoup(i['question'], "html.parser"))
         a = str(BeautifulSoup(i['correct_answer'], "html.parser"))
-        if q.startswith("Which of the"):
+        if q.startswith("Which"):
             count = 0
             x = random.randint(0, 2)
             print(x)
@@ -543,6 +544,7 @@ def execute(command, args, user):
     cur = conn.cursor()
     #print(check)
     date = datetime.now()
+    user = str(user).lower()
     formatted = date.strftime("%Y-%m-%d")
     yesterday = datetime.today() - timedelta(days=1)
     yformatted = yesterday.strftime("%Y-%m-%d")
@@ -575,16 +577,38 @@ def execute(command, args, user):
         temp = totals(int(r[0]), int(r[1]), str(r[2]), int(r[3]), float(r[4]), float(r[5]), str(r[6]))
         #temp.printAll()
         s = temp.chatMsg()
-        #print(s)
+        print(s)
         result = bytes('PRIVMSG ' + c + s, 'UTF-8')
+    elif command == '!multitwitch' or command == '!multi':
+        cur.execute("SELECT p1, p2, p3 FROM state WHERE date=?", (formatted,))
+        row = cur.fetchone()
+        if (row[0] == ''):
+            result = bytes('PRIVMSG ' + c + ' :Zeev is currently playing solos\r\n', 'UTF-8')
+        elif (row[0] != '' and row[1] == ''):
+            result = bytes('PRIVMSG ' + c + ' :Zeev and his partners on multitwitch! http://multitwitch.tv/zeevtwitch/' + row[0] + '\r\n', 'UTF-8')
+        elif (row[0] != '' and row[1] != ''):
+            result = bytes('PRIVMSG ' + c + ' :Zeev and his partners on multitwitch! http://multitwitch.tv/zeevtwitch/' + row[0] + '/' + row[1] + '\r\n', 'UTF-8')
+        elif (row[0] != '' and row[1] != '' and row[2] != ''):
+            result = bytes('PRIVMSG ' + c + ' :Zeev and his partners on multitwitch! http://multitwitch.tv/zeevtwitch/' + row[0] + '/' + row[1] + '/' + row[2] + '\r\n', 'UTF-8')
     elif command == '!tracker':
         result = bytes('PRIVMSG ' + c + ' : https://fortnitetracker.com/profile/pc/twitchzeevtwitch <- click here for stats\r\n', 'UTF-8')
+    elif command == '!bailout':
+        cur.execute("SELECT points FROM users WHERE name=?", (user,))
+        check = cur.fetchone()
+        print(check)
+        if check[0] < 100:
+            cur.execute("UPDATE users SET points=100 WHERE name=?", (user,))
+            conn.commit()
+            result = bytes('PRIVMSG ' + c + ' :HEY EVERYONE, LOOK AT HOW POOR @' + user + ' is! Here\'s your 100 ZeevBux bailout, you degenerate gambler Kappa\r\n', 'UTF-8')
+        else:
+            result = bytes('PRIVMSG ' + c + ' :Sorry, but you are not broke enough to qualify for a bailout yet, try gambling some more!\r\n', 'UTF-8')
     elif command == '!sendzeevbux' or command == '!send':
         if (args==''):
             result = bytes('PRIVMSG ' + c + ' :@' + user + ' improper usage. Check your balance with !zeevbux, then try sending again with !send <user> <amount>.\r\n', 'UTF-8')
         else:
             temp = str(args).partition(' ')
             try:
+                user = user.strip('@')
                 cur.execute("SELECT points FROM users WHERE name=?", (user,))
                 check = cur.fetchone()
                 print(check)
@@ -602,9 +626,11 @@ def execute(command, args, user):
                 result = bytes('PRIVMSG ' + c + ' :@' + user + ' improper usage. Cannot send a non-positive amount of ZeevBux.\r\n', 'UTF-8')
             elif amt_sent > amt_in_acc:
                 result = bytes('PRIVMSG ' + c + ' :@' + user + ' ERROR: Cannot send more ZeevBux than you have in your account. Check your balance before trying again.\r\n', 'UTF-8')
+            elif temp[0] == user:
+                result = bytes('PRIVMSG ' + c + ' :@' + user + ' ERROR: Cannot send Zeevbux to yourself\r\n', 'UTF-8')
             else:
                 sender_new_bal = amt_in_acc - amt_sent
-                recipient = str(temp[0])
+                recipient = str(temp[0]).lower()
                 cur.execute("SELECT points FROM users WHERE name=?", (recipient,))
                 check = cur.fetchone()
                 print(check)
@@ -614,6 +640,7 @@ def execute(command, args, user):
                     recipient_new_bal = int(check[0]) + amt_sent
                     cur.execute("UPDATE users SET points=? WHERE name=?", (recipient_new_bal, recipient))
                 cur.execute("UPDATE users SET points=? WHERE name=?", (sender_new_bal, user))
+                conn.commit()
                 result = bytes('PRIVMSG ' + c + ' :@' + user + ' just sent ' + str(amt_sent) + ' Zeevbux to @' + recipient + '.\r\n', 'UTF-8')
     elif command == '!wager' or command == '!bet':
         cur.execute("SELECT bet_flag FROM flags")
@@ -750,12 +777,14 @@ def execute(command, args, user):
         balance = cur.fetchone()
         print(user)
         print(str(balance[0]))
-        result = bytes('PRIVMSG ' + c + ' :@' +user +' you currently have ' + str(balance[0]) + ' ZeevBux in your account.\r\n', 'UTF-8')
+        result = bytes('PRIVMSG ' + c + ' :/w ' + user + ' Welcome to ZeevBank! You currently have ' + str(balance[0]) + ' ZeevBux in your account.\r\n', 'UTF-8')
     elif command == '!pottycount':
         cur.execute("SELECT pees FROM state")
         row = cur.fetchone()
         pees = str(row[0])
         result = bytes('PRIVMSG ' + c + ' :Zeev has peed ' + pees + ' times this stream. Think he washed his hands? Kappa \r\n', 'UTF-8')
+    elif command == '!whispertest':
+        result = bytes('PRIVMSG ' + c + ' :/w ' + user + ' Wait till u see my oh\r\n', 'UTF-8')
     elif command == '!peepeetime':
         cur.execute("Select pees from state")
         row = cur.fetchone()
@@ -811,7 +840,10 @@ def execute(command, args, user):
     elif command == '!addloss':
         cur.execute("SELECT kills, deaths FROM state WHERE date=?", (formatted,))
         killdeath = cur.fetchone()
-        kills = int(args)
+        try:
+            kills = int(args)
+        except ValueError:
+            kills = 0
         try:
             kd = int(killdeath[0] / killdeath[1])
         except ZeroDivisionError:
@@ -1088,6 +1120,24 @@ def execute(command, args, user):
             result = bytes('PRIVMSG ' + c + ' :/timeout ' + user + ' 60\r\n', 'UTF-8')
         else:
             result = bytes('PRIVMSG ' + c + ' :You shall live to spam another day. You rolled a ' + str(x) + ' @' + user + ' - maybe buy a lottery ticket?\r\n', 'UTF-8')
+    elif command == '!feed':
+        cur.execute('SELECT food from feed')
+        row = cur.fetchone()
+        food = row[0]
+        print(food)
+        food = food + 1
+        cur.execute('UPDATE feed set food=?', (food,))
+        conn.commit()
+        result = bytes('PRIVMSG ' + c + ' : GivePLZ DoritosChip TakeNRG ' + str(food) + ' chips for me, no diabetes yet...feed me some RAM MrDestructoid\r\n', 'UTF-8')
+    elif command == '!drank':
+        cur.execute('SELECT drink from feed')
+        row = cur.fetchone()
+        drinks = row[0]
+        print(drinks)
+        drinks = drinks + 1
+        cur.execute('UPDATE feed set drink=?', (drinks,))
+        conn.commit()
+        result = bytes('PRIVMSG ' + c + ' : FreakinStinkin HSCheers LUL ' + str(drinks) + ' drinks for me, robots cant get drunk...get me some oil human MrDestructoid\r\n', 'UTF-8')
     elif command == '!sourcecode':
         result = bytes('PRIVMSG ' + c + ' : View my source here, feel free to fork and offer suggestions to @Sirlawlington https://github.com/Mattyresch/ZeevBot\r\n', 'UTF-8')
     elif command == '!vanish':
@@ -1096,6 +1146,9 @@ def execute(command, args, user):
         result = bytes('PRIVMSG ' + c + ' : 1600 dpi, 0.03 in game\r\n', 'UTF-8')
     elif command == '!specs':
         result = bytes('PRIVMSG ' + c + ' :MOUSE: Logitech Proteus Core G502 | KEYBOARD: Corsair Gaming K65 LUX RGB | MOUSEPAD: Corsair Gaming MM200 Medium | MIC: Blue Yeti | CAM: Logitech C920 | RIG: GTX 1070 Asus ROG Strix Am4 Motherboard Cryorig H7 Cpu Cooler Ryzen 5 3.6 GHz Team Group Dark 2 x 8 gb RAM | HEADSET: Hyper X Cloud Alpha Pro | MONITOR: Acer Predator XB241H-24, Nvidia G-Sync\r\n', 'UTF-8')
+    elif command == '!seasontotals':
+        result = seasonTotals(c)
+        return result
     elif command == '!remindme':
         if args == '':
             return bytes('PRIVMSG ' + c + ' :Improper usage. Try !remindme <minutes> <message>\r\n', 'UTF-8')
@@ -1142,9 +1195,68 @@ class totals:
         result = (" : Wins: " + str(self.wins) + " Kills: " + str(self.kills) + " Score: " + str(self.score) + " Matches: " + str(self.matches) + " KDR: " + str(self.kdr) + " KPM: " + str(self.kpm) + " Win%: " + str(self.win_percentage))
         print(result)
     def chatMsg(self):
-        result = " : Wins: " + str(self.wins) + " Kills: " + str(self.kills) + " Score: " + str(self.score) + " Matches: " + str(self.matches) + " KDR: " + str(self.kdr) + " KPM: " + str(self.kpm) + " Win%: " + str(self.win_percentage) + '\r\n'
+        result = " : Career stats - Wins: " + str(self.wins) + " Kills: " + str(self.kills) + " Score: " + str(self.score) + " Matches: " + str(self.matches) + " KDR: " + str(self.kdr) + " Win%: " + str(self.win_percentage) + '\r\n'
         print(result)
         return result
+
+
+def seasonTotals(c):
+    key = loadTRNAPI()
+    req = urllib.request.Request('https://api.fortnitetracker.com/v1/profile/pc/ZeevTwitch')
+    req.add_header(key[0], key[2])
+    index1=[]
+    index2=[]
+    index3=[]
+    req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.113 Safari/537.36')
+    try:
+        idk = json.load(urllib.request.urlopen(req))
+    except urllib.error.HTTPError:
+        return
+    result = 'PRIVMSG ' + c + ' :Solo stats: '
+    for j in idk['stats']['curr_p2']:
+        if idk['stats']['curr_p2'][j]['label'] == 'wins':
+            result = result + "Wins: " + idk['stats']['curr_p2'][j]['value']
+        elif idk['stats']['curr_p2'][j]['label'] == 'Score':
+            result = result + " Score: " + idk['stats']['curr_p2'][j]['value']
+        elif idk['stats']['curr_p2'][j]['label'] == 'K/d':
+            result = result + " Kill/Death: " + idk['stats']['curr_p2'][j]['value']
+        elif idk['stats']['curr_p2'][j]['label'] == 'Win %':
+            result = result + " Win %: " + idk['stats']['curr_p2'][j]['value']
+        elif idk['stats']['curr_p2'][j]['label'] == 'Kills':
+            result = result + ' Kills : ' + idk['stats']['curr_p2'][j]['value'] + ' | '
+        else:
+            continue
+    result = result + 'Duo stats: '
+    for j in idk['stats']['curr_p10']:
+        if idk['stats']['curr_p10'][j]['label'] == 'wins':
+            result = result + "Wins: " + idk['stats']['curr_p10'][j]['value']
+        elif idk['stats']['curr_p10'][j]['label'] == 'Score':
+            result = result + " Score: " + idk['stats']['curr_p10'][j]['value']
+        elif idk['stats']['curr_p10'][j]['label'] == 'K/d':
+            result = result + " Kill/Death: " + idk['stats']['curr_p10'][j]['value']
+        elif idk['stats']['curr_p10'][j]['label'] == 'Win %':
+            result = result + " Win %: " + idk['stats']['curr_p10'][j]['value']
+        elif idk['stats']['curr_p10'][j]['label'] == 'Kills':
+            result = result + " Kills : " + idk['stats']['curr_p10'][j]['value'] + ' | '
+        else:
+            continue
+    result = result + 'Squad stats: '
+    for j in idk['stats']['curr_p9']:
+        if idk['stats']['curr_p9'][j]['label'] == 'wins':
+            result = result + "Wins: " + idk['stats']['curr_p9'][j]['value']
+        elif idk['stats']['curr_p9'][j]['label'] == 'Score':
+            result = result + " Score: " + idk['stats']['curr_p9'][j]['value']
+        elif idk['stats']['curr_p9'][j]['label'] == 'K/d':
+            result = result + " Kill/Death: " + idk['stats']['curr_p9'][j]['value']
+        elif idk['stats']['curr_p9'][j]['label'] == 'Win %':
+            result = result + " Win %: " + idk['stats']['curr_p9'][j]['value']
+        elif idk['stats']['curr_p9'][j]['label'] == 'Kills':
+            result = result + " Kills : " + idk['stats']['curr_p9'][j]['value'] + "\r\n"
+        else:
+            continue
+    print(result)
+    result = bytes(result, 'UTF-8')
+    return result
 def updateTotals():
     """Get up to date info from fortnite tracker API, write differences to DB
 
@@ -1154,16 +1266,21 @@ def updateTotals():
     conn = sqlite3.connect('bot.db')
     c = conn.cursor()
     key = loadTRNAPI()
-    req = urllib.request.Request('https://api.fortnitetracker.com/v1/profile/pc/TwitchZeevtwitch')
+    req = urllib.request.Request('https://api.fortnitetracker.com/v1/profile/pc/ZeevTwitch')
     req.add_header(key[0], key[2])
     req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.113 Safari/537.36')
-    idk = json.load(urllib.request.urlopen(req))
+    try:
+        idk = json.load(urllib.request.urlopen(req))
+    except urllib.error.HTTPError:
+        return
     index2 = []
     new = totals(0, 0, 0, 0, 0, 0, 0)
-
-    for j in idk["lifeTimeStats"]:
-        index2.append(j)
+    try:
+        for j in idk["lifeTimeStats"]:
+            index2.append(j)
         # print(j)
+    except KeyError:
+        return
     # print(index2)
     for j in index2:
         if j['key'] == "Kills":
